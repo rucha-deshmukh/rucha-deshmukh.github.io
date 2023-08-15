@@ -1,17 +1,38 @@
 body {
+    margin: 0;
+    padding: 0;
     font-family: Arial, sans-serif;
   }
   
-  header {
+  .container {
+    display: flex; /* Use flexbox for layout */
+  }
+  
+  .side-menu {
+    width: 250px;
     background-color: #333;
     color: #fff;
-    text-align: center;
     padding: 20px;
   }
   
-  section {
-    margin: 20px;
+  .details {
+    flex-grow: 1; /* Expand to fill remaining space */
     padding: 20px;
-    border: 1px solid #ddd;
+    background-color: #f4f4f4;
+  }
+  
+  @media screen and (max-width: 768px) {
+    .container {
+      flex-direction: column; /* Stack items vertically on smaller screens */
+    }
+  
+    .side-menu {
+      width: 100%; /* Take full width on mobile */
+      padding: 10px;
+    }
+  
+    .details {
+      padding: 10px;
+    }
   }
   
