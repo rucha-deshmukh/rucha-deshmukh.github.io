@@ -274,7 +274,7 @@
     function classify(lm, handedness) {
       const u = fingersUp(lm, handedness);
       const count = u.filter(Boolean).length;
-      const pinch = dist(lm[4], lm[8]) < 0.06;
+      const pinch = dist(lm[4], lm[8]) < 0.075;
       if (pinch) return { name: "Pinch", emoji: "🤏", pinch: true };
       if (count === 0) return { name: "Fist", emoji: "✊" };
       if (count === 5) return { name: "Open palm", emoji: "✋", open: true };
@@ -407,11 +407,16 @@
         updateBubbles(fingerPoints, primary && primary.open);
         drawBubbles();
       } else if (mode === "draw") {
-        if (pinchPoint) {
-          if (!curStroke) { curStroke = []; curStroke.color = BUBBLE_COLORS[trail.length % BUBBLE_COLORS.length]; }
-          curStroke.push(pinchPoint);
-        } else if (curStroke) {
-          trail.push(curStroke); curStroke = null;
+        // Only change pen state on frames where detection actually ran.
+        // On frames with no fresh video sample, `result` is null — treating
+        // that as "pinch released" would break the stroke on every other frame.
+        if (result) {
+          if (pinchPoint) {
+            if (!curStroke) { curStroke = []; curStroke.color = BUBBLE_COLORS[trail.length % BUBBLE_COLORS.length]; }
+            curStroke.push(pinchPoint);
+          } else if (curStroke) {
+            trail.push(curStroke); curStroke = null;
+          }
         }
         drawStrokes();
       }
