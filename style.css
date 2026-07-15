@@ -14,4 +14,24 @@ body {
     padding: 20px;
     border: 1px solid #ddd;
   }
+
+  .projects {
+    list-style: none;
+    padding: 0;
+  }
+
+  .projects li {
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .projects a {
+    font-weight: bold;
+    color: #0366d6;
+    text-decoration: none;
+  }
+
+  .projects a:hover {
+    text-decoration: underline;
+  }
   
