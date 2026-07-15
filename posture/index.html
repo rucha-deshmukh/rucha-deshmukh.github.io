@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Posture Checker</title>
+  <style>
+    :root {
+      --bg: #0b0f1a;
+      --panel: rgba(255, 255, 255, 0.06);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #e8ecf4;
+      --muted: #9aa4b8;
+      --accent: #5eead4;
+      --accent2: #a78bfa;
+      --good: #4ade80;
+      --bad: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 800px at 20% -10%, #16203a 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 24px 16px 48px;
+    }
+    h1 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 700; letter-spacing: -0.02em;
+      text-align: center;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .subtitle { color: var(--muted); margin-top: 6px; text-align: center; font-size: 0.95rem; }
+
+    .wrap {
+      display: flex; flex-wrap: wrap; gap: 18px; justify-content: center;
+      align-items: flex-start; margin-top: 22px; width: 100%;
+    }
+
+    .stage {
+      position: relative;
+      width: min(92vw, 640px); aspect-ratio: 3 / 4;
+      border-radius: 18px; overflow: hidden; background: #000;
+      border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    .hud { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; pointer-events: none; z-index: 5; }
+    .badge {
+      background: rgba(10,14,26,0.72); backdrop-filter: blur(8px);
+      border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; font-size: 0.85rem;
+    }
+    .verdict { font-weight: 700; font-size: 1.05rem; }
+    .verdict.good { color: var(--good); }
+    .verdict.bad { color: var(--bad); }
+
+    .overlay {
+      position: absolute; inset: 0; z-index: 8;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; text-align: center; padding: 24px;
+      background: rgba(6,9,18,0.82); backdrop-filter: blur(6px);
+    }
+    .overlay.hidden { display: none; }
+    .overlay p { color: var(--muted); max-width: 420px; line-height: 1.5; }
+    .btn {
+      pointer-events: auto; border: none; cursor: pointer; font-size: 1rem; font-weight: 600;
+      padding: 14px 28px; border-radius: 12px; color: #06111a;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: transform 0.12s ease, box-shadow 0.12s ease; box-shadow: 0 8px 24px rgba(94,234,212,0.25);
+    }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(167,139,250,0.35); }
+    .btn:disabled { opacity: 0.6; cursor: default; transform: none; }
+    .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.15); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error { color: #fca5a5; }
+
+    .panel {
+      width: min(92vw, 320px); background: var(--panel);
+      border: 1px solid var(--border); border-radius: 16px; padding: 20px;
+    }
+    .score { text-align: center; margin-bottom: 16px; }
+    .score .num { font-size: 3rem; font-weight: 800; line-height: 1; }
+    .score .lbl { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+    .checks { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .check {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border); transition: all 0.2s ease;
+    }
+    .check .icon { font-size: 1.1rem; line-height: 1.3; }
+    .check .body b { display: block; font-size: 0.9rem; }
+    .check .body span { color: var(--muted); font-size: 0.8rem; }
+    .check.ok { border-color: rgba(74,222,128,0.4); }
+    .check.no { border-color: rgba(248,113,113,0.4); }
+    .check.idle { opacity: 0.5; }
+
+    .tips { margin-top: 22px; width: min(92vw, 980px); background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 20px; }
+    .tips h3 { font-size: 0.95rem; margin-bottom: 8px; }
+    .tips p { color: var(--muted); font-size: 0.88rem; line-height: 1.55; }
+    footer { margin-top: 28px; color: var(--muted); font-size: 0.82rem; }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>Posture Checker</h1>
+  <p class="subtitle">Stand back so your whole body is visible, facing the camera. All processing stays on your device.</p>
+
+  <div class="wrap">
+    <div class="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="canvas"></canvas>
+      <div class="hud">
+        <div class="badge verdict" id="verdict">Get in frame</div>
+        <div class="badge" id="fps">-- FPS</div>
+      </div>
+      <div class="overlay" id="overlay">
+        <div class="spinner" id="spinner" style="display:none"></div>
+        <p id="overlayText">Stand ~2 metres from the camera so your head, torso and legs are all in view. Nothing is uploaded — it runs entirely in your browser.</p>
+        <button class="btn" id="startBtn">Enable camera</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="score">
+        <div class="num" id="scoreNum">—</div>
+        <div class="lbl">posture score</div>
+      </div>
+      <ul class="checks" id="checks"></ul>
+    </div>
+  </div>
+
+  <div class="tips">
+    <h3>How to read it</h3>
+    <p>
+      This checks alignment for a <b>front-facing standing pose</b>: level shoulders and hips, a
+      centred head, and an upright torso. Green means aligned; red flags what to correct.
+      It's a helpful mirror, not a medical assessment — if you have pain or a condition, see a professional.
+    </p>
+  </div>
+
+  <footer>
+    Powered by <a href="https://ai.google.dev/edge/mediapipe" target="_blank" rel="noopener">MediaPipe</a> ·
+    100% client-side · <a href="../">back to portfolio</a>
+  </footer>
+
+  <script type="module">
+    import { PoseLandmarker, FilesetResolver } from
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const overlay = document.getElementById("overlay");
+    const overlayText = document.getElementById("overlayText");
+    const spinner = document.getElementById("spinner");
+    const startBtn = document.getElementById("startBtn");
+    const verdictEl = document.getElementById("verdict");
+    const fpsEl = document.getElementById("fps");
+    const scoreNum = document.getElementById("scoreNum");
+    const checksEl = document.getElementById("checks");
+
+    let poseLandmarker = null;
+    let running = false;
+    let lastVideoTime = -1;
+
+    // Pose landmark indices we use
+    const NOSE = 0, L_SH = 11, R_SH = 12, L_HIP = 23, R_HIP = 24,
+          L_KNEE = 25, R_KNEE = 26, L_ANK = 27, R_ANK = 28;
+
+    // Checklist definitions (evaluated each frame)
+    const CHECK_DEFS = [
+      { key: "visible", label: "Full body in frame", hint: "Step back so head, hips and knees show" },
+      { key: "shoulders", label: "Shoulders level", hint: "One shoulder is higher than the other" },
+      { key: "hips", label: "Hips level", hint: "Level your hips / stand evenly on both feet" },
+      { key: "head", label: "Head centred", hint: "Head is leaning to one side" },
+      { key: "torso", label: "Torso upright", hint: "You're leaning to one side" },
+    ];
+
+    function renderChecklist(state) {
+      checksEl.innerHTML = "";
+      for (const def of CHECK_DEFS) {
+        const s = state ? state[def.key] : null; // true / false / undefined
+        const li = document.createElement("li");
+        const cls = s === true ? "ok" : s === false ? "no" : "idle";
+        li.className = "check " + cls;
+        const icon = s === true ? "✅" : s === false ? "⚠️" : "•";
+        const sub = s === false ? def.hint : "Looking good";
+        li.innerHTML = `<span class="icon">${icon}</span>
+          <span class="body"><b>${def.label}</b><span>${s === undefined ? "waiting…" : sub}</span></span>`;
+        checksEl.appendChild(li);
+      }
+    }
+    renderChecklist(null);
+
+    async function boot() {
+      startBtn.disabled = true;
+      spinner.style.display = "block";
+      overlayText.textContent = "Loading pose model…";
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+        );
+        poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+
+        overlayText.textContent = "Requesting camera access…";
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 960 } },
+          audio: false,
+        });
+        video.srcObject = stream;
+        await video.play();
+        canvas.width = video.videoWidth || 720;
+        canvas.height = video.videoHeight || 960;
+
+        overlay.classList.add("hidden");
+        running = true;
+        requestAnimationFrame(loop);
+      } catch (err) {
+        spinner.style.display = "none";
+        startBtn.disabled = false;
+        startBtn.textContent = "Try again";
+        overlayText.className = "error";
+        if (err && err.name === "NotAllowedError") overlayText.textContent = "Camera permission denied. Allow access and try again.";
+        else if (err && err.name === "NotFoundError") overlayText.textContent = "No camera found on this device.";
+        else overlayText.textContent = "Couldn't start: " + (err && err.message ? err.message : err);
+        console.error(err);
+      }
+    }
+
+    // ---- Geometry helpers ---------------------------------------------------
+    function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+    function mid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+    function vis(lm, i) { return (lm[i].visibility ?? 1) > 0.5; }
+    // Angle of segment a-b from horizontal, in degrees (0 = perfectly level).
+    function tiltDeg(a, b) { return Math.abs(Math.atan2(Math.abs(a.y - b.y), Math.abs(a.x - b.x))) * 180 / Math.PI; }
+    // Angle of segment from vertical, in degrees (0 = perfectly upright).
+    function leanDeg(top, bottom) { return Math.abs(Math.atan2(Math.abs(top.x - bottom.x), Math.abs(top.y - bottom.y))) * 180 / Math.PI; }
+
+    // Evaluate posture from normalized landmarks -> {state, score}
+    function evaluate(lm) {
+      const state = {};
+      const bodyVisible = vis(lm, L_SH) && vis(lm, R_SH) && vis(lm, L_HIP) && vis(lm, R_HIP)
+        && (vis(lm, L_KNEE) || vis(lm, R_KNEE));
+      state.visible = bodyVisible;
+      if (!bodyVisible) {
+        for (const d of CHECK_DEFS) if (d.key !== "visible") state[d.key] = undefined;
+        return { state, score: null };
+      }
+      const shW = dist(lm[L_SH], lm[R_SH]) || 0.0001;
+      const shMid = mid(lm[L_SH], lm[R_SH]);
+      const hipMid = mid(lm[L_HIP], lm[R_HIP]);
+
+      state.shoulders = tiltDeg(lm[L_SH], lm[R_SH]) < 7;
+      state.hips = tiltDeg(lm[L_HIP], lm[R_HIP]) < 7;
+      state.head = Math.abs(lm[NOSE].x - shMid.x) / shW < 0.2;
+      state.torso = leanDeg(shMid, hipMid) < 10;
+
+      const scored = ["shoulders", "hips", "head", "torso"];
+      const passed = scored.filter((k) => state[k]).length;
+      return { state, score: Math.round((passed / scored.length) * 100) };
+    }
+
+    // ---- Drawing ------------------------------------------------------------
+    const POSE_CONNECTIONS = [
+      [L_SH, R_SH], [L_SH, L_HIP], [R_SH, R_HIP], [L_HIP, R_HIP],
+      [L_SH, 13], [13, 15], [R_SH, 14], [14, 16],
+      [L_HIP, L_KNEE], [L_KNEE, L_ANK], [R_HIP, R_KNEE], [R_KNEE, R_ANK],
+    ];
+    function px(l) { return { x: (1 - l.x) * canvas.width, y: l.y * canvas.height }; }
+
+    function drawPose(lm, color) {
+      ctx.lineWidth = 5; ctx.strokeStyle = color;
+      for (const [a, b] of POSE_CONNECTIONS) {
+        if ((lm[a].visibility ?? 1) < 0.5 || (lm[b].visibility ?? 1) < 0.5) continue;
+        const p = px(lm[a]), q = px(lm[b]);
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+      }
+      ctx.fillStyle = "#fff";
+      for (const i of [NOSE, L_SH, R_SH, L_HIP, R_HIP, L_KNEE, R_KNEE, L_ANK, R_ANK]) {
+        if ((lm[i].visibility ?? 1) < 0.5) continue;
+        const p = px(lm[i]);
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // ---- Main loop ----------------------------------------------------------
+    let frames = 0, fpsTime = performance.now();
+    let smoothScore = null;
+    function loop() {
+      if (!running) return;
+      const now = performance.now();
+
+      let result = null;
+      if (video.currentTime !== lastVideoTime && video.readyState >= 2) {
+        lastVideoTime = video.currentTime;
+        result = poseLandmarker.detectForVideo(video, now);
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (result && result.landmarks && result.landmarks.length) {
+        const lm = result.landmarks[0];
+        const { state, score } = evaluate(lm);
+
+        let color = "#5eead4";
+        if (score !== null) color = score >= 100 ? "#4ade80" : score >= 50 ? "#fbbf24" : "#f87171";
+        drawPose(lm, color);
+        renderChecklist(state);
+
+        if (score === null) {
+          verdictEl.textContent = "Step fully into frame";
+          verdictEl.className = "badge verdict";
+          scoreNum.textContent = "—";
+          smoothScore = null;
+        } else {
+          // Smooth the number a little to avoid jitter.
+          smoothScore = smoothScore === null ? score : smoothScore * 0.8 + score * 0.2;
+          const s = Math.round(smoothScore);
+          scoreNum.textContent = s;
+          scoreNum.style.color = color;
+          if (s >= 90) { verdictEl.textContent = "Great posture ✓"; verdictEl.className = "badge verdict good"; }
+          else { verdictEl.textContent = "Adjust posture"; verdictEl.className = "badge verdict bad"; }
+        }
+      } else if (result) {
+        verdictEl.textContent = "No one detected";
+        verdictEl.className = "badge verdict";
+        scoreNum.textContent = "—";
+        renderChecklist(null);
+        smoothScore = null;
+      }
+
+      frames++;
+      if (now - fpsTime > 500) {
+        fpsEl.textContent = Math.round((frames * 1000) / (now - fpsTime)) + " FPS";
+        frames = 0; fpsTime = now;
+      }
+      requestAnimationFrame(loop);
+    }
+
+    startBtn.addEventListener("click", boot);
+  </script>
+</body>
+</html>
