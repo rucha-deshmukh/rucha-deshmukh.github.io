@@ -31,16 +31,21 @@
       background: linear-gradient(90deg, var(--accent), var(--accent2));
       -webkit-background-clip: text; background-clip: text; color: transparent;
     }
-    .subtitle { color: var(--muted); margin-top: 6px; text-align: center; font-size: 0.95rem; }
+    .subtitle { color: var(--muted); margin-top: 6px; text-align: center; font-size: 0.95rem; max-width: 560px; }
 
-    .wrap {
-      display: flex; flex-wrap: wrap; gap: 18px; justify-content: center;
-      align-items: flex-start; margin-top: 22px; width: 100%;
+    .modes { margin-top: 16px; display: flex; gap: 10px; }
+    .chip {
+      background: var(--panel); border: 1px solid var(--border); color: var(--text);
+      border-radius: 10px; padding: 10px 18px; font-size: 0.9rem; cursor: pointer;
+      transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 8px;
     }
+    .chip:hover { border-color: var(--accent); }
+    .chip.active { background: rgba(94, 234, 212, 0.14); border-color: var(--accent); color: var(--accent); }
+
+    .wrap { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; align-items: flex-start; margin-top: 18px; width: 100%; }
 
     .stage {
-      position: relative;
-      width: min(92vw, 640px); aspect-ratio: 3 / 4;
+      position: relative; width: min(92vw, 640px); aspect-ratio: 3 / 4;
       border-radius: 18px; overflow: hidden; background: #000;
       border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     }
@@ -48,18 +53,14 @@
     canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 
     .hud { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; pointer-events: none; z-index: 5; }
-    .badge {
-      background: rgba(10,14,26,0.72); backdrop-filter: blur(8px);
-      border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; font-size: 0.85rem;
-    }
+    .badge { background: rgba(10,14,26,0.72); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; font-size: 0.85rem; }
     .verdict { font-weight: 700; font-size: 1.05rem; }
     .verdict.good { color: var(--good); }
     .verdict.bad { color: var(--bad); }
 
     .overlay {
-      position: absolute; inset: 0; z-index: 8;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 16px; text-align: center; padding: 24px;
+      position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; text-align: center; padding: 24px;
       background: rgba(6,9,18,0.82); backdrop-filter: blur(6px);
     }
     .overlay.hidden { display: none; }
@@ -76,19 +77,12 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .error { color: #fca5a5; }
 
-    .panel {
-      width: min(92vw, 320px); background: var(--panel);
-      border: 1px solid var(--border); border-radius: 16px; padding: 20px;
-    }
+    .panel { width: min(92vw, 330px); background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
     .score { text-align: center; margin-bottom: 16px; }
     .score .num { font-size: 3rem; font-weight: 800; line-height: 1; }
     .score .lbl { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
     .checks { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-    .check {
-      display: flex; align-items: flex-start; gap: 10px;
-      padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.03);
-      border: 1px solid var(--border); transition: all 0.2s ease;
-    }
+    .check { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); transition: all 0.2s ease; }
     .check .icon { font-size: 1.1rem; line-height: 1.3; }
     .check .body b { display: block; font-size: 0.9rem; }
     .check .body span { color: var(--muted); font-size: 0.8rem; }
@@ -105,7 +99,12 @@
 </head>
 <body>
   <h1>Posture Checker</h1>
-  <p class="subtitle">Stand back so your whole body is visible, facing the camera. All processing stays on your device.</p>
+  <p class="subtitle" id="subtitle">Stand back so your whole body is visible. All processing stays on your device.</p>
+
+  <div class="modes">
+    <button class="chip active" data-mode="front">🧍 Front view</button>
+    <button class="chip" data-mode="side">🚶 Side view</button>
+  </div>
 
   <div class="wrap">
     <div class="stage">
@@ -132,12 +131,8 @@
   </div>
 
   <div class="tips">
-    <h3>How to read it</h3>
-    <p>
-      This checks alignment for a <b>front-facing standing pose</b>: level shoulders and hips, a
-      centred head, and an upright torso. Green means aligned; red flags what to correct.
-      It's a helpful mirror, not a medical assessment — if you have pain or a condition, see a professional.
-    </p>
+    <h3 id="tipsTitle">How to read it</h3>
+    <p id="tipsBody"></p>
   </div>
 
   <footer>
@@ -160,39 +155,62 @@
     const fpsEl = document.getElementById("fps");
     const scoreNum = document.getElementById("scoreNum");
     const checksEl = document.getElementById("checks");
+    const subtitle = document.getElementById("subtitle");
+    const tipsBody = document.getElementById("tipsBody");
 
     let poseLandmarker = null;
     let running = false;
     let lastVideoTime = -1;
+    let mode = "front";
 
-    // Pose landmark indices we use
-    const NOSE = 0, L_SH = 11, R_SH = 12, L_HIP = 23, R_HIP = 24,
-          L_KNEE = 25, R_KNEE = 26, L_ANK = 27, R_ANK = 28;
+    // Pose landmark indices
+    const NOSE = 0, L_EAR = 7, R_EAR = 8, L_SH = 11, R_SH = 12,
+          L_HIP = 23, R_HIP = 24, L_KNEE = 25, R_KNEE = 26, L_ANK = 27, R_ANK = 28;
 
-    // Checklist definitions (evaluated each frame)
-    const CHECK_DEFS = [
+    const FRONT_CHECKS = [
       { key: "visible", label: "Full body in frame", hint: "Step back so head, hips and knees show" },
       { key: "shoulders", label: "Shoulders level", hint: "One shoulder is higher than the other" },
       { key: "hips", label: "Hips level", hint: "Level your hips / stand evenly on both feet" },
       { key: "head", label: "Head centred", hint: "Head is leaning to one side" },
       { key: "torso", label: "Torso upright", hint: "You're leaning to one side" },
     ];
+    const SIDE_CHECKS = [
+      { key: "visible", label: "Body in frame (side on)", hint: "Turn side-on; show ear, hip, knee & ankle" },
+      { key: "neck", label: "Head over shoulders", hint: "Forward head — tuck your chin back" },
+      { key: "upperback", label: "Shoulders over hips", hint: "Rounded/hunched — lift your chest" },
+      { key: "upright", label: "Back upright", hint: "You're leaning forward or back" },
+      { key: "legs", label: "Legs straight", hint: "Knees are bent — stand tall" },
+    ];
+    const TIPS = {
+      front: "Front view checks left–right alignment: level shoulders and hips, a centred head, and no sideways lean. Face the camera with your whole body visible.",
+      side: "Side view checks the plumb line — ear, shoulder, hip and ankle stacked vertically. It flags forward-head (neck), rounded shoulders (upper back), overall lean, and bent knees. Turn 90° so one shoulder points at the camera.",
+    };
+
+    function currentChecks() { return mode === "side" ? SIDE_CHECKS : FRONT_CHECKS; }
 
     function renderChecklist(state) {
       checksEl.innerHTML = "";
-      for (const def of CHECK_DEFS) {
-        const s = state ? state[def.key] : null; // true / false / undefined
-        const li = document.createElement("li");
+      for (const def of currentChecks()) {
+        const s = state ? state[def.key] : undefined;
         const cls = s === true ? "ok" : s === false ? "no" : "idle";
-        li.className = "check " + cls;
         const icon = s === true ? "✅" : s === false ? "⚠️" : "•";
-        const sub = s === false ? def.hint : "Looking good";
+        const sub = s === false ? def.hint : s === true ? "Looking good" : "waiting…";
+        const li = document.createElement("li");
+        li.className = "check " + cls;
         li.innerHTML = `<span class="icon">${icon}</span>
-          <span class="body"><b>${def.label}</b><span>${s === undefined ? "waiting…" : sub}</span></span>`;
+          <span class="body"><b>${def.label}</b><span>${sub}</span></span>`;
         checksEl.appendChild(li);
       }
     }
-    renderChecklist(null);
+
+    function applyMode() {
+      tipsBody.textContent = TIPS[mode];
+      subtitle.textContent = mode === "side"
+        ? "Turn side-on to the camera, whole body visible. All processing stays on your device."
+        : "Face the camera, whole body visible. All processing stays on your device.";
+      scoreNum.textContent = "—"; smoothScore = null;
+      renderChecklist(null);
+    }
 
     async function boot() {
       startBtn.disabled = true;
@@ -241,56 +259,101 @@
     function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
     function mid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
     function vis(lm, i) { return (lm[i].visibility ?? 1) > 0.5; }
-    // Angle of segment a-b from horizontal, in degrees (0 = perfectly level).
     function tiltDeg(a, b) { return Math.abs(Math.atan2(Math.abs(a.y - b.y), Math.abs(a.x - b.x))) * 180 / Math.PI; }
-    // Angle of segment from vertical, in degrees (0 = perfectly upright).
     function leanDeg(top, bottom) { return Math.abs(Math.atan2(Math.abs(top.x - bottom.x), Math.abs(top.y - bottom.y))) * 180 / Math.PI; }
+    function angleAt(a, b, c) { // angle at vertex b, in degrees
+      const v1 = { x: a.x - b.x, y: a.y - b.y }, v2 = { x: c.x - b.x, y: c.y - b.y };
+      const dot = v1.x * v2.x + v1.y * v2.y;
+      const m = Math.hypot(v1.x, v1.y) * Math.hypot(v2.x, v2.y) || 1e-6;
+      return Math.acos(Math.max(-1, Math.min(1, dot / m))) * 180 / Math.PI;
+    }
 
-    // Evaluate posture from normalized landmarks -> {state, score}
-    function evaluate(lm) {
+    // ---- Front-view evaluation ---------------------------------------------
+    function evaluateFront(lm) {
       const state = {};
       const bodyVisible = vis(lm, L_SH) && vis(lm, R_SH) && vis(lm, L_HIP) && vis(lm, R_HIP)
         && (vis(lm, L_KNEE) || vis(lm, R_KNEE));
       state.visible = bodyVisible;
-      if (!bodyVisible) {
-        for (const d of CHECK_DEFS) if (d.key !== "visible") state[d.key] = undefined;
-        return { state, score: null };
-      }
-      const shW = dist(lm[L_SH], lm[R_SH]) || 0.0001;
+      if (!bodyVisible) return { state, score: null };
+      const shW = dist(lm[L_SH], lm[R_SH]) || 1e-4;
       const shMid = mid(lm[L_SH], lm[R_SH]);
       const hipMid = mid(lm[L_HIP], lm[R_HIP]);
-
       state.shoulders = tiltDeg(lm[L_SH], lm[R_SH]) < 7;
       state.hips = tiltDeg(lm[L_HIP], lm[R_HIP]) < 7;
       state.head = Math.abs(lm[NOSE].x - shMid.x) / shW < 0.2;
       state.torso = leanDeg(shMid, hipMid) < 10;
-
       const scored = ["shoulders", "hips", "head", "torso"];
       const passed = scored.filter((k) => state[k]).length;
       return { state, score: Math.round((passed / scored.length) * 100) };
     }
 
+    // ---- Side-view evaluation ----------------------------------------------
+    function evaluateSide(lm) {
+      const state = {};
+      const sumVis = (idxs) => idxs.reduce((s, i) => s + (lm[i].visibility ?? 1), 0);
+      const left = sumVis([L_EAR, L_SH, L_HIP, L_KNEE, L_ANK]);
+      const right = sumVis([R_EAR, R_SH, R_HIP, R_KNEE, R_ANK]);
+      const L = left >= right;
+      const EAR = L ? L_EAR : R_EAR, SH = L ? L_SH : R_SH, HIP = L ? L_HIP : R_HIP,
+            KNEE = L ? L_KNEE : R_KNEE, ANK = L ? L_ANK : R_ANK;
+      const chain = { EAR, SH, HIP, KNEE, ANK };
+      const bodyVisible = [EAR, SH, HIP, KNEE, ANK].every((i) => vis(lm, i));
+      state.visible = bodyVisible;
+      if (!bodyVisible) return { state, score: null, chain };
+
+      const torsoH = Math.abs(lm[SH].y - lm[HIP].y) || 1e-4;
+      const neckOff = Math.abs(lm[EAR].x - lm[SH].x) / torsoH;   // forward head
+      const backOff = Math.abs(lm[SH].x - lm[HIP].x) / torsoH;   // rounded/hunched
+      const uprightAngle = leanDeg(lm[EAR], lm[HIP]);            // overall lean
+      const kneeAngle = angleAt(lm[HIP], lm[KNEE], lm[ANK]);     // straight leg ≈ 180°
+
+      state.neck = neckOff < 0.32;
+      state.upperback = backOff < 0.28;
+      state.upright = uprightAngle < 12;
+      state.legs = kneeAngle > 158;
+      const scored = ["neck", "upperback", "upright", "legs"];
+      const passed = scored.filter((k) => state[k]).length;
+      return { state, score: Math.round((passed / scored.length) * 100), chain };
+    }
+
     // ---- Drawing ------------------------------------------------------------
-    const POSE_CONNECTIONS = [
+    const FRONT_CONNECTIONS = [
       [L_SH, R_SH], [L_SH, L_HIP], [R_SH, R_HIP], [L_HIP, R_HIP],
       [L_SH, 13], [13, 15], [R_SH, 14], [14, 16],
       [L_HIP, L_KNEE], [L_KNEE, L_ANK], [R_HIP, R_KNEE], [R_KNEE, R_ANK],
     ];
     function px(l) { return { x: (1 - l.x) * canvas.width, y: l.y * canvas.height }; }
 
-    function drawPose(lm, color) {
+    function drawFront(lm, color) {
       ctx.lineWidth = 5; ctx.strokeStyle = color;
-      for (const [a, b] of POSE_CONNECTIONS) {
-        if ((lm[a].visibility ?? 1) < 0.5 || (lm[b].visibility ?? 1) < 0.5) continue;
+      for (const [a, b] of FRONT_CONNECTIONS) {
+        if (!vis(lm, a) || !vis(lm, b)) continue;
         const p = px(lm[a]), q = px(lm[b]);
         ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
       }
       ctx.fillStyle = "#fff";
       for (const i of [NOSE, L_SH, R_SH, L_HIP, R_HIP, L_KNEE, R_KNEE, L_ANK, R_ANK]) {
-        if ((lm[i].visibility ?? 1) < 0.5) continue;
+        if (!vis(lm, i)) continue;
         const p = px(lm[i]);
         ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fill();
       }
+    }
+
+    function drawSide(lm, chain, color, ok) {
+      const { EAR, SH, HIP, KNEE, ANK } = chain;
+      const pts = [EAR, SH, HIP, KNEE, ANK].map((i) => px(lm[i]));
+      // Plumb-line reference dropped from the shoulder
+      const shP = px(lm[SH]);
+      ctx.setLineDash([8, 8]); ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.beginPath(); ctx.moveTo(shP.x, 0); ctx.lineTo(shP.x, canvas.height); ctx.stroke();
+      ctx.setLineDash([]);
+      // Body chain
+      ctx.lineWidth = 5; ctx.strokeStyle = color;
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      ctx.fillStyle = "#fff";
+      for (const p of pts) { ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill(); }
     }
 
     // ---- Main loop ----------------------------------------------------------
@@ -310,33 +373,31 @@
 
       if (result && result.landmarks && result.landmarks.length) {
         const lm = result.landmarks[0];
-        const { state, score } = evaluate(lm);
+        const evalRes = mode === "side" ? evaluateSide(lm) : evaluateFront(lm);
+        const { state, score } = evalRes;
 
         let color = "#5eead4";
         if (score !== null) color = score >= 100 ? "#4ade80" : score >= 50 ? "#fbbf24" : "#f87171";
-        drawPose(lm, color);
+
+        if (mode === "side") drawSide(lm, evalRes.chain, color);
+        else drawFront(lm, color);
         renderChecklist(state);
 
         if (score === null) {
-          verdictEl.textContent = "Step fully into frame";
+          verdictEl.textContent = mode === "side" ? "Turn side-on, full body" : "Step fully into frame";
           verdictEl.className = "badge verdict";
-          scoreNum.textContent = "—";
-          smoothScore = null;
+          scoreNum.textContent = "—"; smoothScore = null;
         } else {
-          // Smooth the number a little to avoid jitter.
           smoothScore = smoothScore === null ? score : smoothScore * 0.8 + score * 0.2;
           const s = Math.round(smoothScore);
-          scoreNum.textContent = s;
-          scoreNum.style.color = color;
+          scoreNum.textContent = s; scoreNum.style.color = color;
           if (s >= 90) { verdictEl.textContent = "Great posture ✓"; verdictEl.className = "badge verdict good"; }
           else { verdictEl.textContent = "Adjust posture"; verdictEl.className = "badge verdict bad"; }
         }
       } else if (result) {
         verdictEl.textContent = "No one detected";
         verdictEl.className = "badge verdict";
-        scoreNum.textContent = "—";
-        renderChecklist(null);
-        smoothScore = null;
+        scoreNum.textContent = "—"; renderChecklist(null); smoothScore = null;
       }
 
       frames++;
@@ -348,6 +409,16 @@
     }
 
     startBtn.addEventListener("click", boot);
+    document.querySelectorAll(".chip[data-mode]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        document.querySelectorAll(".chip[data-mode]").forEach((c) => c.classList.remove("active"));
+        chip.classList.add("active");
+        mode = chip.dataset.mode;
+        applyMode();
+      });
+    });
+
+    applyMode();
   </script>
 </body>
 </html>
